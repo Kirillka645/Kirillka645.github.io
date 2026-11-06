@@ -1,12 +1,12 @@
 /*!
- * KupuLampa v1.3.0 — «Гарри Поттер 4K» для Lampa
+ * KupuLampa v1.4.0 — «Гарри Поттер 4K» для Lampa
  * Автор: @Kirillka645 · https://github.com/Kirillka645/Kirillka645.github.io
  *
  *  • Пункт меню «Гарри Поттер 4K» — все 8 фильмов серии по порядку (данные TMDB)
  *  • Устанавливает предпочтение 2160p; качество зависит от источника и плеера
  *  • Настройки → KupuLampa → «Всегда 4K (2160p)» (можно выключить)
  *
- *  Прямое открытие веб-плеера Alloha через API KupuLand; BwaRC не используется.
+ *  Прямой API Alloha: используется публичный токен клиента anime-dl-core, который может перестать работать.
  */
 (function () {
     'use strict';
@@ -14,7 +14,7 @@
     if (window.kupulampa_ready) return;
     window.kupulampa_ready = true;
 
-    var VERSION       = '1.3.0';
+    var VERSION       = '1.4.0';
     var SOURCE        = 'kupulampa';
     var COLLECTION_ID = 1241; // TMDB: Harry Potter Collection
     var FALLBACK_IDS  = [671, 672, 673, 674, 675, 767, 12444, 12445];
@@ -51,7 +51,7 @@
                 en: 'The player picks 2160p when the source offers it, otherwise the best available quality'
             },
             kupulampa_descr: {
-                ru: 'Фильмы о Гарри Поттере и веб-плеер Alloha через KupuLand',
+                ru: 'Фильмы о Гарри Поттере и веб-плеер через прямой API Alloha',
                 uk: 'Усі фільми про Гаррі Поттера в меню + 4K (2160p) у плеєрі',
                 be: 'Усе фільмы пра Гары Потэра ў меню + 4K (2160p) у плэеры',
                 en: 'All Harry Potter films in the menu + 4K (2160p) in the player'
@@ -257,13 +257,13 @@
         if (changed && typeof Lampa.Plugins.save === 'function') Lampa.Plugins.save();
     }
 
-    /* ---------- Alloha через API KupuLand ---------- */
+    /* ---------- Прямой API Alloha ---------- */
     function webPlayer(object) {
         var root = $('<div class="kupulampa-web" style="position:fixed;top:0;right:0;bottom:0;left:0;z-index:10000;background:#000;display:flex;flex-direction:column">' +
             '<div style="display:flex;gap:16px;padding:12px;background:#171717;color:#fff;align-items:center">' +
             '<div class="selector kupu-web-back" style="padding:10px 16px;background:#333;border-radius:6px">Назад</div>' +
             '<div class="selector kupu-web-focus" style="padding:10px 16px;background:#333;border-radius:6px">Управление плеером</div>' +
-            '<span>Alloha · KupuLand</span></div>' +
+            '<span>Alloha</span></div>' +
             '<iframe class="kupu-web-frame" style="width:100%;flex:1;border:0;background:#000" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen tabindex="0" title="Alloha"></iframe></div>');
         var frame = root.find('.kupu-web-frame');
         var last = false;
@@ -296,24 +296,19 @@
     function openAlloha(movie) {
         var id = Number(movie && movie.id);
         if (!id || FALLBACK_IDS.indexOf(id) < 0) return;
-        var url = 'https://kupuland.vercel.app/api/player?contentId=tmdb-movie-' + encodeURIComponent(id) +
-            '&tmdb=' + encodeURIComponent(id) + '&type=movie';
+        // Public default token from anime-dl-core; not an account secret.
+        var publicToken = "04941a9a3ca3ac16e2b4327347bbc1";
         if (Lampa.Noty && Lampa.Noty.show) Lampa.Noty.show('KupuLampa: подключаем Alloha…');
-        $.ajax({ url: url, type: 'GET', dataType: 'json', timeout: 15000 }).done(function (data) {
-            var sources = data && data.sources;
-            var link = '';
-            if (Array.isArray(sources)) {
-                for (var i = 0; i < sources.length; i++) {
-                    if (sources[i] && sources[i].id === 'alloha') { link = sources[i].embedUrl || ''; break; }
-                }
-            }
+        $.ajax({ url: 'https://api.alloha.tv/', type: 'GET', dataType: 'json', timeout: 15000,
+            data: { token: publicToken, tmdb: id } }).done(function (data) {
+            var link = data && data.status === 'success' && data.data && data.data.iframe || '';
             if (!/^https:\/\//i.test(link)) {
                 if (Lampa.Noty && Lampa.Noty.show) Lampa.Noty.show('Alloha не найдена для этого фильма');
                 return;
             }
             Lampa.Activity.push({ url: '', title: 'Alloha', component: 'kupu_alloha', embedUrl: link });
         }).fail(function () {
-            if (Lampa.Noty && Lampa.Noty.show) Lampa.Noty.show('KupuLampa: не удалось связаться с KupuLand');
+            if (Lampa.Noty && Lampa.Noty.show) Lampa.Noty.show('KupuLampa: не удалось связаться с API Alloha');
         });
     }
 
@@ -323,7 +318,7 @@
                 FALLBACK_IDS.indexOf(Number(e.data.movie.id)) < 0) return;
             var view = e.object.activity.render();
             if (view.find('.kupu-alloha-button').length) return;
-            var button = $('<div class="full-start__button selector kupu-alloha-button" data-subtitle="Alloha через KupuLand"><span>KupuLampa</span></div>');
+            var button = $('<div class="full-start__button selector kupu-alloha-button" data-subtitle="Прямой API Alloha"><span>KupuLampa</span></div>');
             button.on('hover:enter click', function () { openAlloha(e.data.movie); });
             var anchor = view.find('.view--torrent');
             if (anchor.length) anchor.after(button);
