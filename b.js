@@ -1,10 +1,9 @@
 /*!
- * KupuLampa v1.2.0 — «Гарри Поттер 4K» для Lampa
+ * KupuLampa v1.3.0 — «Гарри Поттер 4K» для Lampa
  * Автор: @Kirillka645 · https://github.com/Kirillka645/Kirillka645.github.io
  *
  *  • Пункт меню «Гарри Поттер 4K» — все 8 фильмов серии по порядку (данные TMDB)
- *  • Плеер Lampa автоматически выбирает 2160p (4K), если источник его отдаёт,
- *    иначе — лучшее доступное качество
+ *  • Устанавливает предпочтение 2160p; качество зависит от источника и плеера
  *  • Настройки → KupuLampa → «Всегда 4K (2160p)» (можно выключить)
  *
  *  Прямое открытие веб-плеера Alloha через API KupuLand; BwaRC не используется.
@@ -15,7 +14,7 @@
     if (window.kupulampa_ready) return;
     window.kupulampa_ready = true;
 
-    var VERSION       = '1.2.0';
+    var VERSION       = '1.3.0';
     var SOURCE        = 'kupulampa';
     var COLLECTION_ID = 1241; // TMDB: Harry Potter Collection
     var FALLBACK_IDS  = [671, 672, 673, 674, 675, 767, 12444, 12445];
@@ -324,7 +323,7 @@
                 FALLBACK_IDS.indexOf(Number(e.data.movie.id)) < 0) return;
             var view = e.object.activity.render();
             if (view.find('.kupu-alloha-button').length) return;
-            var button = $('<div class="full-start__button selector kupu-alloha-button"><span>Alloha</span></div>');
+            var button = $('<div class="full-start__button selector kupu-alloha-button" data-subtitle="Alloha через KupuLand"><span>KupuLampa</span></div>');
             button.on('hover:enter click', function () { openAlloha(e.data.movie); });
             var anchor = view.find('.view--torrent');
             if (anchor.length) anchor.after(button);
