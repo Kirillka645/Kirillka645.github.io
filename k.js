@@ -1,13 +1,12 @@
 /*!
- * KupuLampa v1.0.0 — «Гарри Поттер 4K» для Lampa
+ * KupuLampa v1.3.0 — «Гарри Поттер 4K» для Lampa
  * Автор: @Kirillka645 · https://github.com/Kirillka645/Kirillka645.github.io
  *
  *  • Пункт меню «Гарри Поттер 4K» — все 8 фильмов серии по порядку (данные TMDB)
- *  • Плеер Lampa автоматически выбирает 2160p (4K), если источник его отдаёт,
- *    иначе — лучшее доступное качество
+ *  • Устанавливает предпочтение 2160p; качество зависит от источника и плеера
  *  • Настройки → KupuLampa → «Всегда 4K (2160p)» (можно выключить)
  *
- *  Плагин не содержит и не добавляет источники видео.
+ *  Прямое открытие веб-плеера Alloha через API KupuLand; BwaRC не используется.
  */
 (function () {
     'use strict';
@@ -15,7 +14,7 @@
     if (window.kupulampa_ready) return;
     window.kupulampa_ready = true;
 
-    var VERSION       = '1.0.0';
+    var VERSION       = '1.3.0';
     var SOURCE        = 'kupulampa';
     var COLLECTION_ID = 1241; // TMDB: Harry Potter Collection
     var FALLBACK_IDS  = [671, 672, 673, 674, 675, 767, 12444, 12445];
@@ -46,13 +45,13 @@
                 ru: 'Всегда 4K (2160p)', uk: 'Завжди 4K (2160p)', be: 'Заўсёды 4K (2160p)', en: 'Always 4K (2160p)'
             },
             kupulampa_force4k_descr: {
-                ru: 'Плеер выбирает 2160p, если источник его отдаёт, иначе — лучшее доступное качество',
+                ru: 'Запрашивает 2160p в Lampa; источник и плеер могут игнорировать настройку',
                 uk: 'Плеєр обирає 2160p, якщо джерело його віддає, інакше — найкращу доступну якість',
                 be: 'Плэер выбірае 2160p, калі крыніца яго аддае, інакш — найлепшую даступную якасць',
                 en: 'The player picks 2160p when the source offers it, otherwise the best available quality'
             },
             kupulampa_descr: {
-                ru: 'Все фильмы о Гарри Поттере в меню + 4K (2160p) в плеере',
+                ru: 'Фильмы о Гарри Поттере и веб-плеер Alloha через KupuLand',
                 uk: 'Усі фільми про Гаррі Поттера в меню + 4K (2160p) у плеєрі',
                 be: 'Усе фільмы пра Гары Потэра ў меню + 4K (2160p) у плэеры',
                 en: 'All Harry Potter films in the menu + 4K (2160p) in the player'
@@ -258,6 +257,85 @@
         if (changed && typeof Lampa.Plugins.save === 'function') Lampa.Plugins.save();
     }
 
+    /* ---------- Alloha через API KupuLand ---------- */
+    function webPlayer(object) {
+        var root = $('<div class="kupulampa-web" style="position:fixed;top:0;right:0;bottom:0;left:0;z-index:10000;background:#000;display:flex;flex-direction:column">' +
+            '<div style="display:flex;gap:16px;padding:12px;background:#171717;color:#fff;align-items:center">' +
+            '<div class="selector kupu-web-back" style="padding:10px 16px;background:#333;border-radius:6px">Назад</div>' +
+            '<div class="selector kupu-web-focus" style="padding:10px 16px;background:#333;border-radius:6px">Управление плеером</div>' +
+            '<span>Alloha · KupuLand</span></div>' +
+            '<iframe class="kupu-web-frame" style="width:100%;flex:1;border:0;background:#000" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen tabindex="0" title="Alloha"></iframe></div>');
+        var frame = root.find('.kupu-web-frame');
+        var last = false;
+        frame.attr('src', object.embedUrl);
+        root.find('.kupu-web-back').on('hover:enter click', function () { Lampa.Activity.backward(); });
+        root.find('.kupu-web-focus').on('hover:enter click', function () {
+            if (frame[0]) frame[0].focus();
+        });
+        root.find('.selector').on('hover:focus', function () { last = this; });
+        this.create = function () { return root; };
+        this.render = function () { return root; };
+        this.start = function () {
+            Lampa.Controller.add('kupu_alloha', {
+                toggle: function () {
+                    Lampa.Controller.collectionSet(root);
+                    Lampa.Controller.collectionFocus(last || false, root);
+                },
+                left: function () { Lampa.Navigator.move('left'); },
+                right: function () { Lampa.Navigator.move('right'); },
+                up: function () { Lampa.Navigator.move('up'); },
+                down: function () { Lampa.Navigator.move('down'); },
+                back: function () { Lampa.Activity.backward(); }
+            });
+            Lampa.Controller.toggle('kupu_alloha');
+        };
+        this.stop = function () {};
+        this.destroy = function () { frame.attr('src', 'about:blank'); root.remove(); };
+    }
+
+    function openAlloha(movie) {
+        var id = Number(movie && movie.id);
+        if (!id || FALLBACK_IDS.indexOf(id) < 0) return;
+        var url = 'https://kupuland.vercel.app/api/player?contentId=tmdb-movie-' + encodeURIComponent(id) +
+            '&tmdb=' + encodeURIComponent(id) + '&type=movie';
+        if (Lampa.Noty && Lampa.Noty.show) Lampa.Noty.show('KupuLampa: подключаем Alloha…');
+        $.ajax({ url: url, type: 'GET', dataType: 'json', timeout: 15000 }).done(function (data) {
+            var sources = data && data.sources;
+            var link = '';
+            if (Array.isArray(sources)) {
+                for (var i = 0; i < sources.length; i++) {
+                    if (sources[i] && sources[i].id === 'alloha') { link = sources[i].embedUrl || ''; break; }
+                }
+            }
+            if (!/^https:\/\//i.test(link)) {
+                if (Lampa.Noty && Lampa.Noty.show) Lampa.Noty.show('Alloha не найдена для этого фильма');
+                return;
+            }
+            Lampa.Activity.push({ url: '', title: 'Alloha', component: 'kupu_alloha', embedUrl: link });
+        }).fail(function () {
+            if (Lampa.Noty && Lampa.Noty.show) Lampa.Noty.show('KupuLampa: не удалось связаться с KupuLand');
+        });
+    }
+
+    function addAllohaButton(e) {
+        try {
+            if (!e || e.type !== 'complite' || !e.data || !e.data.movie ||
+                FALLBACK_IDS.indexOf(Number(e.data.movie.id)) < 0) return;
+            var view = e.object.activity.render();
+            if (view.find('.kupu-alloha-button').length) return;
+            var button = $('<div class="full-start__button selector kupu-alloha-button" data-subtitle="Alloha через KupuLand"><span>KupuLampa</span></div>');
+            button.on('hover:enter click', function () { openAlloha(e.data.movie); });
+            var anchor = view.find('.view--torrent');
+            if (anchor.length) anchor.after(button);
+            else view.find('.full-start__buttons').append(button);
+        } catch (err) { log('Alloha button error', err && err.message ? err.message : err); }
+    }
+
+    function addAlloha() {
+        Lampa.Component.add('kupu_alloha', webPlayer);
+        Lampa.Listener.follow('full', addAllohaButton);
+    }
+
     /* ---------- Запуск ---------- */
 
     function init() {
@@ -266,6 +344,7 @@
             addSource();
             addSettings();
             addMenu();
+            addAlloha();
 
             if (Lampa.Storage.field('kupulampa_force4k')) applyQuality(true);
 
